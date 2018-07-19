@@ -1,9 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
+	"fmt"
 	"io/ioutil"
+	"os"
 	"path/filepath"
+	"strings"
 
 	"text/template"
 
@@ -34,26 +38,43 @@ func check(e error) {
 	}
 }
 
+func debug(thing interface{}) {
+	fmt.Printf("%#v", thing)
+}
+
 func main() {
-	files, err := ioutil.ReadDir(exportDir)
+	fileInfos, err := ioutil.ReadDir(exportDir)
 	check(err)
 
 	fmap := sprig.TxtFuncMap()
 	t := template.Must(template.New("test").Funcs(fmap).Parse(tpl))
 
-	for _, file := range files {
-		content, err := ioutil.ReadFile(filepath.Join(exportDir, file.Name()))
+	for _, fileInfo := range fileInfos {
+		// No need to import empty files.
+		if fileInfo.Size() == 0 {
+			continue
+		}
+
+		title, _ := getTitle(fileInfo)
+		check(err)
+		// If the title is an empty string, it means the file only contains
+		// empty lines or spaces. No need to import these either.
+		if title == "" {
+			continue
+		}
+
+		content, err := ioutil.ReadFile(filepath.Join(exportDir, fileInfo.Name()))
 		check(err)
 
 		// Ensure we escape cson triple-single quotes.
 		content = bytes.Replace([]byte(content), []byte("'''"), []byte("\\'''"), -1)
 
-		// @todo Dynamically get Created, Updated, Folder, & Title.
+		// @todo Dynamically get Created, Updated, Folder.
 		vars := map[string]interface{}{
 			"Created": "cxxx",
 			"Updated": "uxxx",
 			"Folder":  "fxxx",
-			"Title":   "txxx",
+			"Title":   title,
 			"Content": string(content),
 		}
 
@@ -61,8 +82,36 @@ func main() {
 		err = t.Execute(&buffer, vars)
 		check(err)
 
-		err = ioutil.WriteFile(filepath.Join(importDir, file.Name()), buffer.Bytes(), 0644)
+		err = ioutil.WriteFile(filepath.Join(importDir, fileInfo.Name()), buffer.Bytes(), 0644)
 		check(err)
 	}
 
+}
+
+// If there are only empty spaces and/or newlines, return an empty string.
+func getTitle(fileInfo os.FileInfo) (string, error) {
+	file, err := os.Open(filepath.Join(exportDir, fileInfo.Name()))
+	if err != nil {
+		return "", err
+	}
+	// Default to an empty string, in case there's no content after trimming.
+	title := ""
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		// Strip leading or trailing spaces.
+		trimmed := strings.TrimSpace(scanner.Text())
+		// Continue through empty lines until we reach one with content.
+		if trimmed == "" {
+			continue
+		} else {
+			title = trimmed
+			break
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return "", err
+	}
+
+	return title, nil
 }
