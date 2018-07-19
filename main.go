@@ -30,6 +30,9 @@ tags: []
 isStarred: false
 isTrashed: false
 `
+	// Mimick Boostnote expected time format. Similar to a cross between
+	// time.RFC3339 and time.StampMilli.
+	boostFormat = "2006-01-02T15:04:05.000Z"
 )
 
 func check(e error) {
@@ -63,16 +66,23 @@ func main() {
 			continue
 		}
 
+		// Note creation time is not stored in most Linux file systems.
+		// We could hack something together for Windows, MacOS, Ext4 etc, but
+		// Go standard library does not support it. So let's just use updated
+		// time as created time as well.
+		modTime := fileInfo.ModTime()
+		updated := modTime.Format(boostFormat)
+
 		content, err := ioutil.ReadFile(filepath.Join(exportDir, fileInfo.Name()))
 		check(err)
 
 		// Ensure we escape cson triple-single quotes.
 		content = bytes.Replace([]byte(content), []byte("'''"), []byte("\\'''"), -1)
 
-		// @todo Dynamically get Created, Updated, Folder.
+		// @todo Dynamically get Folder.
 		vars := map[string]interface{}{
-			"Created": "cxxx",
-			"Updated": "uxxx",
+			"Created": updated,
+			"Updated": updated,
 			"Folder":  "fxxx",
 			"Title":   title,
 			"Content": string(content),
