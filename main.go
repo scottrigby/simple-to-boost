@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -13,15 +14,14 @@ import (
 	"text/template"
 
 	"github.com/Masterminds/sprig"
+	"github.com/manifoldco/promptui"
 	homedir "github.com/mitchellh/go-homedir"
 )
 
 const (
 	// @todo Allow users to specify Boost storage path. I'm not sure this is the
 	// same on every OS installation.
-	boostDir = "~/Boostnote"
-	// @todo Allow configurating export and import dirs.
-	exportDir = "export"
+	boostDir  = "~/Boostnote"
 	importDir = "import"
 	// The other type is "SNIPPET_NOTE", however that requires a file name
 	// and/or language "mode", which Simplenote exports don't have. If there's
@@ -60,6 +60,9 @@ func debug(thing interface{}) {
 }
 
 func main() {
+	exportDir, err := getSimplenoteExportDir()
+	check(err)
+
 	fileInfos, err := ioutil.ReadDir(exportDir)
 	check(err)
 
@@ -72,7 +75,7 @@ func main() {
 			continue
 		}
 
-		title, _ := getTitle(fileInfo)
+		title, _ := getTitle(fileInfo, exportDir)
 		check(err)
 		// If the title is an empty string, it means the file only contains
 		// empty lines or spaces. No need to import these either.
@@ -98,6 +101,8 @@ func main() {
 		// Ensure we escape cson triple-single quotes.
 		content = bytes.Replace([]byte(content), []byte("'''"), []byte("\\'''"), -1)
 
+		// @todo support "isTrashed" Boost flag from Simplenote "trashed-" file
+		// name prefix.
 		vars := map[string]interface{}{
 			"Created": updated,
 			"Updated": updated,
@@ -117,8 +122,39 @@ func main() {
 
 }
 
+func getSimplenoteExportDir() (string, error) {
+	validate := func(input string) error {
+		input, err := homedir.Expand(input)
+		if err != nil {
+			return err
+		}
+
+		if _, err := os.Stat(input); os.IsNotExist(err) {
+			return errors.New("Path does not exist")
+		}
+		return nil
+	}
+
+	prompt := promptui.Prompt{
+		Label:    "Simplenote export directory",
+		Validate: validate,
+	}
+
+	result, err := prompt.Run()
+	if err != nil {
+		return "", err
+	}
+
+	result, err = homedir.Expand(result)
+	if err != nil {
+		return "", err
+	}
+
+	return result, err
+}
+
 // If there are only empty spaces and/or newlines, return an empty string.
-func getTitle(fileInfo os.FileInfo) (string, error) {
+func getTitle(fileInfo os.FileInfo, exportDir string) (string, error) {
 	file, err := os.Open(filepath.Join(exportDir, fileInfo.Name()))
 	if err != nil {
 		return "", err
