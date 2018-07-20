@@ -19,9 +19,6 @@ import (
 )
 
 const (
-	// @todo Allow users to specify Boost storage path. I'm not sure this is the
-	// same on every OS installation.
-	boostDir  = "~/Boostnote"
 	importDir = "import"
 	// The other type is "SNIPPET_NOTE", however that requires a file name
 	// and/or language "mode", which Simplenote exports don't have. If there's
@@ -63,6 +60,12 @@ func main() {
 	exportDir, err := getSimplenoteExportDir()
 	check(err)
 
+	boostStoragePath, err := getBoostStoragePath()
+	check(err)
+
+	folder, err := getBoostFolderID(boostStoragePath)
+	check(err)
+
 	fileInfos, err := ioutil.ReadDir(exportDir)
 	check(err)
 
@@ -90,11 +93,6 @@ func main() {
 		modTime := fileInfo.ModTime()
 		updated := modTime.Format(boostFormat)
 
-		boostStoragePath, err := getBoostStoragePath()
-		check(err)
-		folder, err := getBoostFolderID(boostStoragePath)
-		check(err)
-
 		content, err := ioutil.ReadFile(filepath.Join(exportDir, fileInfo.Name()))
 		check(err)
 
@@ -114,12 +112,14 @@ func main() {
 			"Folder":  folder,
 			"Title":   title,
 			"Content": string(content),
+			"Trashed": trashed,
 		}
 
 		var buffer bytes.Buffer
 		err = t.Execute(&buffer, vars)
 		check(err)
 
+		// err = ioutil.WriteFile(filepath.Join(boostStoragePath, "notes", fileInfo.Name()), buffer.Bytes(), 0644)
 		err = ioutil.WriteFile(filepath.Join(importDir, fileInfo.Name()), buffer.Bytes(), 0644)
 		check(err)
 	}
@@ -194,7 +194,29 @@ type boostConfig struct {
 
 // Support ~ expansion for home directory config.
 func getBoostStoragePath() (string, error) {
-	boostStoragePath, err := homedir.Expand(boostDir)
+	validate := func(input string) error {
+		input, err := homedir.Expand(input)
+		if err != nil {
+			return err
+		}
+		if _, err := os.Stat(input); os.IsNotExist(err) {
+			return errors.New("Path does not exist")
+		}
+		return nil
+	}
+
+	prompt := promptui.Prompt{
+		Label:    "Boost storage directory",
+		Validate: validate,
+		Default:  "~/Boostnote",
+	}
+
+	result, err := prompt.Run()
+	if err != nil {
+		return "", err
+	}
+
+	boostStoragePath, err := homedir.Expand(result)
 	if err != nil {
 		return "", err
 	}
