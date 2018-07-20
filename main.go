@@ -28,7 +28,7 @@ const (
 	// Note this template includes a newline purposefully, as this is expected
 	// by Boostnote.
 	tpl = `createdAt: "{{.Created}}"
-updatedAt: ""{{.Updated}}""
+updatedAt: "{{.Updated}}"
 type: "{{.Type}}"
 folder: "{{.Folder}}"
 title: "{{.Title}}"
