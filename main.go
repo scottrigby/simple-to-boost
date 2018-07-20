@@ -7,19 +7,22 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"text/template"
 
 	"github.com/Masterminds/sprig"
+	"github.com/davecgh/go-spew/spew"
+	"github.com/gofrs/uuid"
 	"github.com/manifoldco/promptui"
 	homedir "github.com/mitchellh/go-homedir"
 )
 
 const (
-	importDir = "import"
 	// The other type is "SNIPPET_NOTE", however that requires a file name
 	// and/or language "mode", which Simplenote exports don't have. If there's
 	// a use-case for bulk importing Simplenotes that are all snippets and all
@@ -44,6 +47,7 @@ isTrashed: {{.Trashed}}
 	// Mimick Boostnote expected time format. Similar to a cross between
 	// time.RFC3339 and time.StampMilli.
 	boostFormat = "2006-01-02T15:04:05.000Z"
+	charset     = "abcdefghijklmnopqrstuvwxyz" + "0123456789"
 )
 
 func check(e error) {
@@ -53,7 +57,7 @@ func check(e error) {
 }
 
 func debug(thing interface{}) {
-	fmt.Printf("%#v\n", thing)
+	spew.Dump(thing)
 }
 
 func main() {
@@ -119,11 +123,16 @@ func main() {
 		err = t.Execute(&buffer, vars)
 		check(err)
 
-		// err = ioutil.WriteFile(filepath.Join(boostStoragePath, "notes", fileInfo.Name()), buffer.Bytes(), 0644)
-		err = ioutil.WriteFile(filepath.Join(importDir, fileInfo.Name()), buffer.Bytes(), 0644)
+		// Ensure note file names match Boostnote expectations.
+		uuid, err := uuid.NewV4()
+		check(err)
+		newName := uuid.String() + ".cson"
+
+		err = ioutil.WriteFile(filepath.Join(boostStoragePath, "notes", newName), buffer.Bytes(), 0644)
 		check(err)
 	}
 
+	fmt.Println("Imported! Quit and reopen Boost to see your files.")
 }
 
 func getSimplenoteExportDir() (string, error) {
@@ -185,13 +194,6 @@ func getTitle(fileInfo os.FileInfo, exportDir string) (string, error) {
 	return title, nil
 }
 
-// We only care about the key.
-type boostConfig struct {
-	Folders []struct {
-		Key string `json:"key"`
-	} `json:"folders"`
-}
-
 // Support ~ expansion for home directory config.
 func getBoostStoragePath() (string, error) {
 	validate := func(input string) error {
@@ -223,6 +225,17 @@ func getBoostStoragePath() (string, error) {
 	return boostStoragePath, nil
 }
 
+type boostConfig struct {
+	Folders []folder `json:"folders"`
+	Version string   `json:"version"`
+}
+
+type folder struct {
+	Key   string `json:"key"`
+	Color string `json:"color"`
+	Name  string `json:"name"`
+}
+
 func getBoostFolderID(storagePath string) (string, error) {
 	file, err := ioutil.ReadFile(filepath.Join(storagePath, "boostnote.json"))
 	if err != nil {
@@ -235,9 +248,69 @@ func getBoostFolderID(storagePath string) (string, error) {
 		return "", err
 	}
 
-	// @todo Allow users to specify which folder they wish to import into.
-	// For now, just use the key of the first folder listed in the config file.
-	folder := config.Folders[0].Key
+	// Build a list of folder names for the user prompt (they don't care about
+	// the folder key).
+	nameList := []string{}
+	// Build a map keyed by name so we can get the folder "key" from the user's
+	// selection.
+	reverseKeyList := map[string]string{}
+	for _, folder := range config.Folders {
+		nameList = append(nameList, folder.Name)
+		reverseKeyList[folder.Name] = folder.Key
+	}
+	// Add an additional option to automatically create a new Simplenote import
+	// folder.
+	// @todo Only prompt for a new folder if one by this name doesn't exist.
+	nameList = append(nameList, "Create new folder")
 
-	return folder, nil
+	prompt := promptui.Select{
+		Label: "Select folder",
+		Items: nameList,
+	}
+
+	_, result, err := prompt.Run()
+	if err != nil {
+		return "", err
+	}
+
+	key := reverseKeyList[result]
+
+	if result == "Create new folder" {
+		// Add new folder to JSON config.
+		key = randString(20)
+		new := folder{
+			Key: key,
+			// See Boostnote folder color options at https://github.com/BoostIO/Boostnote/blob/master/browser/lib/consts.js
+			Color: "#2BA5F7",
+			Name:  "Simplenote import",
+		}
+		config.Folders = append(config.Folders, new)
+
+		// Match Boostnote config JSON file 2 space indentation.
+		newConfig, err := json.MarshalIndent(config, "", "  ")
+		if err != nil {
+			return "", err
+		}
+		err = ioutil.WriteFile(filepath.Join(storagePath, "boostnote.json"), newConfig, 0644)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	return key, nil
+}
+
+var seededRand = rand.New(
+	rand.NewSource(time.Now().UnixNano()))
+
+func randStringWithCharset(length int, charset string) string {
+	b := make([]byte, length)
+	for i := range b {
+		b[i] = charset[seededRand.Intn(len(charset))]
+	}
+	return string(b)
+}
+
+func randString(length int) string {
+	return randStringWithCharset(length, charset)
 }
