@@ -6,9 +6,26 @@ Go CLI tool to import a Simplenote bulk export into Boostnote.
 
 Make sure to back up your existing Boost files before running this. I whipped up this quick project for my own use. If you want to help contribute to it, that'd be great 🙌
 
-## Install
+## Installation
 
-Use `dep`, or `go get github.com/scottrigby/simple-to-boost`.
+### Binaries (recommended)
+
+Download your preferred asset from the [releases page](https://github.com/scottrigby/simple-to-boost/releases) and install manually.
+
+### Homebrew (MacOS)
+
+```console
+$ brew install scottrigby/tap/simple-to-boost
+```
+
+### Go get (for contributing)
+
+```console
+$ go get -d github.com/scottrigby/simple-to-boost
+$ cd $GOPATH/src/github.com/scottrigby/simple-to-boost
+$ dep ensure -vendor-only
+$ go install
+```
 
 ## Usage
 
