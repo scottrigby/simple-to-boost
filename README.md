@@ -4,7 +4,15 @@ Go CLI tool to import a Simplenote bulk export into Boostnote.
 
 ## Before you start
 
-Make sure to back up your existing Boost files before running this. I whipped up this quick project for my own use. If you want to help contribute to it, that'd be great 🙌
+### This is for fun
+
+Use this if you prefer CLI over UI.
+
+Boostnote already allows you to [import .md/.txt files](https://github.com/BoostIO/Boostnote/wiki/md-txt-import) by drag and drop, and Simplenote exports notes as a zip of `.txt` files.
+
+### Backup
+
+Make sure to back up your existing Boost files before running this. I whipped up this quick project for my own use. If you want to help contribute to it for fun, I'm usually open to collaboration 🙌
 
 ## Installation
 
@@ -35,7 +43,7 @@ $ go install
     - Simplenote export directory (paste the directory location from step 1 above. You may use `~` for home directory expansion)
     - Boost storage directory (defaults to `~/Boostnote`, which will work if that directory exists. If not, locate your preferred Boost storage directory)
     - Select folder (you will be given the option to select existing folders for your desired storage directory, or to automatically create a new one)
-1. You should see the message:
-    > Imported! Quit and reopen Boost to see your files.
+    - You should see the message:
+        > Imported! Quit and reopen Boost to see your files.
 
-    Your newly imported Boost files will retain the Simplenote updated date metadata, so they should still be in the correct order!
+        Your newly imported Boost files will retain the Simplenote updated date metadata, so they should still be listed in the correct order in Boostnote.
