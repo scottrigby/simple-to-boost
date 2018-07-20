@@ -42,7 +42,7 @@ tags: [
   "simplenote-import"
 ]
 isStarred: false
-isTrashed: false
+isTrashed: {{.Trashed}}
 `
 	// Mimick Boostnote expected time format. Similar to a cross between
 	// time.RFC3339 and time.StampMilli.
@@ -101,8 +101,12 @@ func main() {
 		// Ensure we escape cson triple-single quotes.
 		content = bytes.Replace([]byte(content), []byte("'''"), []byte("\\'''"), -1)
 
-		// @todo support "isTrashed" Boost flag from Simplenote "trashed-" file
-		// name prefix.
+		// Simplenote export prefixes trashed note file names with "trashed-".
+		var trashed = "false"
+		if strings.HasPrefix(fileInfo.Name(), "trash-") {
+			trashed = "true"
+		}
+
 		vars := map[string]interface{}{
 			"Created": updated,
 			"Updated": updated,
