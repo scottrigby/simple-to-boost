@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -12,21 +13,34 @@ import (
 	"text/template"
 
 	"github.com/Masterminds/sprig"
+	homedir "github.com/mitchellh/go-homedir"
 )
 
 const (
+	// @todo Allow users to specify Boost storage path. I'm not sure this is the
+	// same on every OS installation.
+	boostDir = "~/Boostnote"
 	// @todo Allow configurating export and import dirs.
 	exportDir = "export"
 	importDir = "import"
-	tpl       = `createdAt: "{{.Created}}"
+	// The other type is "SNIPPET_NOTE", however that requires a file name
+	// and/or language "mode", which Simplenote exports don't have. If there's
+	// a use-case for bulk importing Simplenotes that are all snippets and all
+	// of the same language then we can make this configurable.
+	noteType = "MARKDOWN_NOTE"
+	// Note this template includes a newline purposefully, as this is expected
+	// by Boostnote.
+	tpl = `createdAt: "{{.Created}}"
 updatedAt: ""{{.Updated}}""
-type: "MARKDOWN_NOTE"
+type: "{{.Type}}"
 folder: "{{.Folder}}"
 title: "{{.Title}}"
 content: '''
 {{.Content | indent 2}}
 '''
-tags: []
+tags: [
+  "simplenote-import"
+]
 isStarred: false
 isTrashed: false
 `
@@ -42,7 +56,7 @@ func check(e error) {
 }
 
 func debug(thing interface{}) {
-	fmt.Printf("%#v", thing)
+	fmt.Printf("%#v\n", thing)
 }
 
 func main() {
@@ -73,17 +87,22 @@ func main() {
 		modTime := fileInfo.ModTime()
 		updated := modTime.Format(boostFormat)
 
+		boostStoragePath, err := getBoostStoragePath()
+		check(err)
+		folder, err := getBoostFolderID(boostStoragePath)
+		check(err)
+
 		content, err := ioutil.ReadFile(filepath.Join(exportDir, fileInfo.Name()))
 		check(err)
 
 		// Ensure we escape cson triple-single quotes.
 		content = bytes.Replace([]byte(content), []byte("'''"), []byte("\\'''"), -1)
 
-		// @todo Dynamically get Folder.
 		vars := map[string]interface{}{
 			"Created": updated,
 			"Updated": updated,
-			"Folder":  "fxxx",
+			"Type":    noteType,
+			"Folder":  folder,
 			"Title":   title,
 			"Content": string(content),
 		}
@@ -124,4 +143,39 @@ func getTitle(fileInfo os.FileInfo) (string, error) {
 	}
 
 	return title, nil
+}
+
+// We only care about the key.
+type boostConfig struct {
+	Folders []struct {
+		Key string `json:"key"`
+	} `json:"folders"`
+}
+
+// Support ~ expansion for home directory config.
+func getBoostStoragePath() (string, error) {
+	boostStoragePath, err := homedir.Expand(boostDir)
+	if err != nil {
+		return "", err
+	}
+	return boostStoragePath, nil
+}
+
+func getBoostFolderID(storagePath string) (string, error) {
+	file, err := ioutil.ReadFile(filepath.Join(storagePath, "boostnote.json"))
+	if err != nil {
+		return "", err
+	}
+
+	var config boostConfig
+	err = json.Unmarshal(file, &config)
+	if err != nil {
+		return "", err
+	}
+
+	// @todo Allow users to specify which folder they wish to import into.
+	// For now, just use the key of the first folder listed in the config file.
+	folder := config.Folders[0].Key
+
+	return folder, nil
 }
