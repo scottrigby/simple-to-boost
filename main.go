@@ -262,6 +262,8 @@ func getBoostFolderID(storagePath string) (string, error) {
 	// folder.
 	// @todo Only prompt for a new folder if one by this name doesn't exist.
 	nameList = append(nameList, "Create new folder")
+	// Let people exit at this point without errors.
+	nameList = append(nameList, "Exit")
 
 	prompt := promptui.Select{
 		Label: "Select folder",
@@ -295,6 +297,11 @@ func getBoostFolderID(storagePath string) (string, error) {
 		if err != nil {
 			return "", err
 		}
+	}
+
+	if result == "Exit" {
+		os.Exit(0)
+		return "", nil
 	}
 
 	return key, nil
